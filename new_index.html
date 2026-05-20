@@ -10,6 +10,7 @@
             background-color: #f6f7fb;
             padding: 2rem;
             color: #333;
+            margin: 0;
         }
         .container {
             max-width: 600px;
@@ -22,7 +23,7 @@
         h1 { font-size: 1.5rem; margin-top: 0; color: #1c1d21; }
         .form-group { margin-bottom: 1.25rem; }
         label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #676879; font-size: 0.875rem; }
-        input[type="text"] {
+        input[type="text"], input[type="password"] {
             width: 100%; padding: 0.75rem; border: 1px solid #c3c6d4; border-radius: 4px; font-size: 1rem; box-sizing: border-box;
         }
         input:focus { outline: none; border-color: #0073ea; }
@@ -36,10 +37,47 @@
         .results-table th, .results-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e1e1e4; }
         .results-table th { background-color: #f1f2f6; color: #676879; font-size: 0.85rem; text-transform: uppercase; }
         .status-badge { background: #e1e1e4; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }
+
+        /* Full Screen Locked Overlay */
+        #authOverlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #1c1d21;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .auth-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .auth-card h2 { margin-top: 0; font-size: 1.35rem; color: #1c1d21; }
+        .auth-card p { color: #676879; font-size: 0.9rem; margin-bottom: 1.5rem; }
     </style>
 </head>
 <body>
 
+<!-- Lock Overlay Screen -->
+<div id="authOverlay">
+    <div class="auth-card">
+        <h2>Thermaplate Secure Access</h2>
+        <p>Please enter the team password to open the Monday lookup tool.</p>
+        <div class="form-group" style="text-align: left;">
+            <label for="gatePassword">Password</label>
+            <input type="password" id="gatePassword" placeholder="••••••••" autocomplete="off">
+        </div>
+        <button id="loginBtn" class="btn">Unlock Tool</button>
+        <div id="authError" class="error"></div>
+    </div>
+</div>
+
+<!-- Main Application Workspace -->
 <div class="container">
     <h1>Thermaplate Board Column Lookup</h1>
 
@@ -70,22 +108,44 @@
 
 <script>
     // ==========================================
-    // CONFIGURATION: PASTE YOUR MONDAY TOKEN HERE
+    // CONFIGURATION: SET VARIABLES HERE
     // ==========================================
     const MONDAY_API_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ4MDc3MDYyNiwiYWFpIjoxMSwidWlkIjo3MjE1MDU2NSwiaWFkIjoiMjAyNS0wMy0wNFQxNjoyMDowMi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6Mjc5OTgwNDAsInJnbiI6InVzZTEifQ.1G5efXieL3XyA7q9TGl0ICJQDre4bGagXqIc5G9dP0Y";
+    const APP_PASSWORD = "1050"; 
     const BOARD_ID = "18402153540";
 
+    // --- GATEWAY SECURITY LOGIC ---
+    const authOverlay = document.getElementById('authOverlay');
+    const gatePasswordInput = document.getElementById('gatePassword');
+    const loginButton = document.getElementById('loginBtn');
+    const authError = document.getElementById('authError');
+
+    loginButton.addEventListener('click', checkPassword);
+    gatePasswordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') checkPassword();
+    });
+
+    function checkPassword() {
+        const inputPass = gatePasswordInput.value.trim();
+        if (inputPass === APP_PASSWORD) {
+            // Hide the lock screen overlay entirely
+            authOverlay.style.display = 'none';
+            // Set focus directly onto the TP entry block for speed
+            document.getElementById('tpNumber').focus();
+        } else {
+            authError.textContent = "Invalid password. Access denied.";
+            authError.style.display = 'block';
+            gatePasswordInput.value = '';
+        }
+    }
+
+    // --- MONDAY BOARD LOOKUP LOGIC ---
     const lookupButton = document.getElementById('lookupBtn');
     const tpInput = document.getElementById('tpNumber');
 
-    // Run search on button click
     lookupButton.addEventListener('click', runLookup);
-
-    // Run search if they hit the "Enter" key inside the input box
     tpInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            runLookup();
-        }
+        if (e.key === 'Enter') runLookup();
     });
 
     async function runLookup() {
@@ -95,7 +155,6 @@
         const resultsBody = document.getElementById('resultsBody');
         const matchedItemName = document.getElementById('matchedItemName');
 
-        // Reset display states
         errorMsg.style.display = 'none';
         resultsBox.style.display = 'none';
         resultsBody.innerHTML = '';
@@ -106,13 +165,6 @@
             return;
         }
 
-        if (MONDAY_API_KEY === "YOUR_PERSONAL_API_TOKEN_HERE" || !MONDAY_API_KEY) {
-            errorMsg.textContent = "Configuration Error: You need to replace 'YOUR_PERSONAL_API_TOKEN_HERE' with your actual Monday API key in the code.";
-            errorMsg.style.display = 'block';
-            return;
-        }
-
-        // The exact modern query format Monday's strict type-checker wants
         const query = `
         query {
           items_page_by_column_values (
@@ -136,7 +188,6 @@
           }
         }`;
 
-        // Give immediate visual feedback that it's working
         lookupButton.textContent = "Searching...";
         lookupButton.disabled = true;
 
@@ -160,7 +211,7 @@
             const items = result.data.items_page_by_column_values.items;
 
             if (!items || items.length === 0) {
-                errorMsg.textContent = `No exact match found for "${tpNumber}" on this board. Check your spelling or hyphens.`;
+                errorMsg.textContent = `No exact match found for "${tpNumber}".`;
                 errorMsg.style.display = 'block';
                 return;
             }
@@ -168,14 +219,11 @@
             const item = items[0];
             matchedItemName.textContent = item.name;
 
-            // Generate rows for valid columns
             item.column_values.forEach(col => {
                 if (col.text && col.text.trim() !== "") {
                     const row = document.createElement('tr');
-                    
                     const nameCell = document.createElement('td');
                     nameCell.innerHTML = `<strong>${col.column.title}</strong>`;
-                    
                     const valueCell = document.createElement('td');
                     valueCell.innerHTML = `<span class="status-badge">${col.text}</span>`;
                     
@@ -191,7 +239,6 @@
             errorMsg.textContent = "API Error: " + err.message;
             errorMsg.style.display = 'block';
         } finally {
-            // Restore button state
             lookupButton.textContent = "Search Monday Board";
             lookupButton.disabled = false;
         }
